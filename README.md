@@ -39,7 +39,7 @@ database/           # Koneksi database
 ui/                 # Semua tampilan UI
 App.java            # Main
 travelhotel.sql     # File SQL untuk import database
-Dokumentasi.pdf           # Dokumentasi singkat
+Dokumentasi.pdf     # Dokumentasi singkat
 ```
 
 ## Kontributor

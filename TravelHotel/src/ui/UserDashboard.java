@@ -136,12 +136,26 @@ public class UserDashboard extends JFrame {
         contentPanel.setBackground(Color.WHITE);
         contentPanel.setBorder(BorderFactory.createEmptyBorder(32, 32, 32, 32));
 
+        // Ambil username dari database
+        String username = "";
+        try (Connection conn = Database.connect()) {
+            String sql = "SELECT username FROM users WHERE id = ?";
+            PreparedStatement stmt = conn.prepareStatement(sql);
+            stmt.setInt(1, userId);
+            ResultSet rs = stmt.executeQuery();
+            if (rs.next()) {
+                username = rs.getString("username");
+            }
+        } catch (SQLException e) {
+            username = "";
+        }
+
         // Judul
-        JLabel title = new JLabel("Selamat Datang di TravelHotel", SwingConstants.LEFT);
+        JLabel title = new JLabel("Selamat Datang di TravelHotel" + (username.isEmpty() ? "" : ", " + username), SwingConstants.LEFT);
         title.setFont(new Font("Segoe UI", Font.BOLD, 32));
         title.setForeground(new Color(52, 58, 64));
         contentPanel.add(title, BorderLayout.BEFORE_FIRST_LINE);
-
+        
         // Table styling
         kamarModel = new DefaultTableModel(new String[]{"Nama", "Tipe", "Harga/Hari"}, 0) {
             @Override

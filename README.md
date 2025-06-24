@@ -10,7 +10,7 @@ Dibuat sebagai tugas akhir mata kuliah Pemrograman Berorientasi Objek.
 - Filter kamar berdasarkan tipe dan harga
 - Admin dapat mengubah status kamar tersedia
 - Otomatis update status kamar setelah checkout
-- UI modern dan responsif
+- UI responsif
 
 ## Cara Menjalankan
 1. **Import database** dari file `travelhotel.sql` ke MySQL.

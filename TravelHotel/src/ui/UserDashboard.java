@@ -155,7 +155,7 @@ public class UserDashboard extends JFrame {
         title.setFont(new Font("Segoe UI", Font.BOLD, 32));
         title.setForeground(new Color(52, 58, 64));
         contentPanel.add(title, BorderLayout.BEFORE_FIRST_LINE);
-        
+
         // Table styling
         kamarModel = new DefaultTableModel(new String[]{"Nama", "Tipe", "Harga/Hari"}, 0) {
             @Override
@@ -295,7 +295,7 @@ public class UserDashboard extends JFrame {
 
         try (Connection conn = Database.connect()) {
             String sql = """
-                    SELECT k.nama, b.tanggal_checkin, b.tanggal_checkout
+                    SELECT b.id, k.nama, b.tanggal_checkin, b.tanggal_checkout
                     FROM booking b
                     JOIN kamar k ON b.kamar_id = k.id
                     WHERE b.user_id = ?
@@ -307,6 +307,7 @@ public class UserDashboard extends JFrame {
 
             while (rs.next()) {
                 riwayatModel.addRow(new Object[]{
+                    rs.getInt("id"), // simpan id booking (hidden)
                     rs.getString("nama"),
                     rs.getDate("tanggal_checkin"),
                     rs.getDate("tanggal_checkout")
@@ -317,11 +318,19 @@ public class UserDashboard extends JFrame {
             return;
         }
 
-        JTable riwayatTable = new JTable(riwayatModel);
+        JTable riwayatTable = new JTable(riwayatModel) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+        };
         riwayatTable.setFont(new Font("Segoe UI", Font.PLAIN, 15));
         riwayatTable.setRowHeight(24);
         riwayatTable.getTableHeader().setFont(new Font("Segoe UI", Font.BOLD, 16));
         riwayatTable.setBackground(Color.WHITE);
+
+        // Sembunyikan kolom id booking
+        riwayatTable.removeColumn(riwayatTable.getColumnModel().getColumn(0));
 
         JScrollPane scrollPane = new JScrollPane(riwayatTable);
         scrollPane.setPreferredSize(new Dimension(480, 220));
@@ -335,7 +344,55 @@ public class UserDashboard extends JFrame {
         panel.setBackground(Color.WHITE);
         panel.add(scrollPane, BorderLayout.CENTER);
 
+        // Tambahkan mouse listener untuk receipt
+        riwayatTable.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mouseClicked(java.awt.event.MouseEvent evt) {
+                int row = riwayatTable.getSelectedRow();
+                if (row != -1) {
+                    // Ambil id booking dari model (meski kolom disembunyikan)
+                    int bookingId = (int) riwayatModel.getValueAt(row, 0);
+                    showReceiptDialog(bookingId);
+                }
+            }
+        });
+
         JOptionPane.showMessageDialog(this, panel, "Riwayat Booking", JOptionPane.PLAIN_MESSAGE);
+    }
+
+    // Tambahkan method baru untuk menampilkan receipt
+    private void showReceiptDialog(int bookingId) {
+        try (Connection conn = Database.connect()) {
+            String sql = """
+                SELECT b.id, u.username, k.nama AS kamar, k.tipe, k.harga, b.tanggal_checkin, b.tanggal_checkout
+                FROM booking b
+                JOIN users u ON b.user_id = u.id
+                JOIN kamar k ON b.kamar_id = k.id
+                WHERE b.id = ?
+            """;
+            PreparedStatement stmt = conn.prepareStatement(sql);
+            stmt.setInt(1, bookingId);
+            ResultSet rs = stmt.executeQuery();
+            if (rs.next()) {
+                StringBuilder sb = new StringBuilder();
+                sb.append("=== RECEIPT BOOKING HOTEL ===\n\n");
+                sb.append("Booking ID   : ").append(rs.getInt("id")).append("\n");
+                sb.append("Nama User    : ").append(rs.getString("username")).append("\n");
+                sb.append("Nama Kamar   : ").append(rs.getString("kamar")).append("\n");
+                sb.append("Tipe Kamar   : ").append(rs.getString("tipe")).append("\n");
+                sb.append("Harga/Hari   : ").append(formatRupiah(rs.getDouble("harga"))).append("\n");
+                sb.append("Check-in     : ").append(rs.getDate("tanggal_checkin")).append("\n");
+                sb.append("Check-out    : ").append(rs.getDate("tanggal_checkout")).append("\n");
+                sb.append("\nTunjukkan receipt ini ke administrasi hotel saat check-in.\n");
+
+                JTextArea area = new JTextArea(sb.toString());
+                area.setEditable(false);
+                area.setFont(new Font("Monospaced", Font.PLAIN, 14));
+                area.setBackground(Color.WHITE);
+                JOptionPane.showMessageDialog(this, new JScrollPane(area), "Receipt Booking", JOptionPane.INFORMATION_MESSAGE);
+            }
+        } catch (SQLException e) {
+            JOptionPane.showMessageDialog(this, "Gagal memuat receipt: " + e.getMessage());
+        }
     }
 
     // Filter kamar tersedia

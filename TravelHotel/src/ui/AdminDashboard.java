@@ -4,6 +4,7 @@ import database.Database;
 
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
+import javax.swing.table.TableCellRenderer;
 import java.awt.*;
 import java.awt.event.*;
 import java.sql.*;
@@ -72,6 +73,14 @@ public class AdminDashboard extends JFrame {
         table.setRowHeight(28);
         table.setFont(new Font("Segoe UI", Font.PLAIN, 15));
         table.getTableHeader().setFont(new Font("Segoe UI", Font.BOLD, 16));
+        // Set renderer kolom "Tersedia" agar wrap
+        table.getColumnModel().getColumn(0).setPreferredWidth(40);   // ID
+        table.getColumnModel().getColumn(1).setPreferredWidth(120);  // Nama
+        table.getColumnModel().getColumn(2).setPreferredWidth(80);   // Tipe
+        table.getColumnModel().getColumn(3).setPreferredWidth(90);   // Harga/Hari
+        table.getColumnModel().getColumn(4).setPreferredWidth(180);  // Tersedia (wrap)
+        table.getColumnModel().getColumn(4).setCellRenderer(new MultiLineCellRenderer());
+        table.getColumnModel().getColumn(5).setPreferredWidth(120);  // Gambar
         loadKamar();
 
         JScrollPane tableScroll = new JScrollPane(table);
@@ -162,12 +171,55 @@ public class AdminDashboard extends JFrame {
             ResultSet rs = stmt.executeQuery("SELECT * FROM kamar");
 
             while (rs.next()) {
+                int kamarId = rs.getInt("id");
+                boolean tersedia = rs.getBoolean("tersedia");
+                String statusTersedia = "Ya";
+
+                if (!tersedia) {
+                    // Ambil booking yang masih aktif (tanggal_checkout >= hari ini dan tidak NULL)
+                    String sqlBooking = "SELECT u.username, b.tanggal_checkin, b.tanggal_checkout " +
+                            "FROM booking b JOIN users u ON b.user_id = u.id " +
+                            "WHERE b.kamar_id = ? AND b.tanggal_checkout IS NOT NULL AND b.tanggal_checkout >= CURDATE() " +
+                            "ORDER BY b.tanggal_checkout ASC LIMIT 1";
+                    try (PreparedStatement stmtB = conn.prepareStatement(sqlBooking)) {
+                        stmtB.setInt(1, kamarId);
+                        ResultSet rsB = stmtB.executeQuery();
+                        if (rsB.next()) {
+                            String username = rsB.getString("username");
+                            Date tglCheckin = rsB.getDate("tanggal_checkin");
+                            Date tglCheckout = rsB.getDate("tanggal_checkout");
+                            statusTersedia = String.format("Tidak\n(%s,\n%s - %s)", username,
+                                    tglCheckin != null ? tglCheckin.toString() : "-",
+                                    tglCheckout != null ? tglCheckout.toString() : "-");
+                        } else {
+                            // Jika tidak ada booking aktif, ambil booking terakhir (meskipun tanggal_checkout NULL)
+                            String sqlLast = "SELECT u.username, b.tanggal_checkin, b.tanggal_checkout " +
+                                    "FROM booking b JOIN users u ON b.user_id = u.id " +
+                                    "WHERE b.kamar_id = ? ORDER BY b.tanggal_checkout DESC LIMIT 1";
+                            try (PreparedStatement stmtLast = conn.prepareStatement(sqlLast)) {
+                                stmtLast.setInt(1, kamarId);
+                                ResultSet rsLast = stmtLast.executeQuery();
+                                if (rsLast.next()) {
+                                    String username = rsLast.getString("username");
+                                    Date tglCheckin = rsLast.getDate("tanggal_checkin");
+                                    Date tglCheckout = rsLast.getDate("tanggal_checkout");
+                                    statusTersedia = String.format("Tidak\n(%s,\n%s - %s)", username,
+                                            tglCheckin != null ? tglCheckin.toString() : "-",
+                                            tglCheckout != null ? tglCheckout.toString() : "-");
+                                } else {
+                                    statusTersedia = "Tidak";
+                                }
+                            }
+                        }
+                    }
+                }
+
                 model.addRow(new Object[]{
-                        rs.getInt("id"),
+                        kamarId,
                         rs.getString("nama"),
                         rs.getString("tipe"),
                         rs.getDouble("harga"),
-                        rs.getBoolean("tersedia") ? "Ya" : "Tidak",
+                        statusTersedia,
                         rs.getString("gambar")
                 });
             }
@@ -241,7 +293,7 @@ public class AdminDashboard extends JFrame {
         JTextField tipe = new JTextField(tipeAwal);
         JTextField harga = new JTextField(String.valueOf(hargaAwal));
         JTextField gambar = new JTextField(gambarAwal);
-        JCheckBox tersedia = new JCheckBox("Tersedia", "Ya".equalsIgnoreCase(tersediaAwal));
+        JCheckBox tersedia = new JCheckBox("Tersedia", tersediaAwal.startsWith("Ya"));
         JButton pilihGambarBtn = new JButton("Pilih Gambar");
 
         pilihGambarBtn.addActionListener(e -> {
@@ -308,5 +360,31 @@ public class AdminDashboard extends JFrame {
                 JOptionPane.showMessageDialog(this, "Gagal menghapus kamar: " + e.getMessage());
             }
         }
+    }
+}
+
+// Renderer untuk wrap text pada kolom "Tersedia"
+class MultiLineCellRenderer extends JTextArea implements TableCellRenderer {
+    public MultiLineCellRenderer() {
+        setLineWrap(true);
+        setWrapStyleWord(true);
+        setOpaque(true);
+    }
+
+    @Override
+    public Component getTableCellRendererComponent(JTable table, Object value,
+            boolean isSelected, boolean hasFocus, int row, int column) {
+        setText(value == null ? "" : value.toString());
+        setFont(table.getFont());
+        setForeground(isSelected ? table.getSelectionForeground() : table.getForeground());
+        setBackground(isSelected ? table.getSelectionBackground() : table.getBackground());
+        setBorder(null);
+
+        // Penyesuaian tinggi baris otomatis
+        int currentHeight = getPreferredSize().height;
+        if (table.getRowHeight(row) != currentHeight) {
+            table.setRowHeight(row, currentHeight);
+        }
+        return this;
     }
 }
